@@ -29,6 +29,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <QTextCursor>
+#include <QRegularExpression>
+#include <QDebug>
 
 main_window::main_window()
 {
@@ -37,6 +40,9 @@ main_window::main_window()
 
     editor = new QTextEdit(this);
     setCentralWidget(editor);
+    editor->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    connect(editor, &QTextEdit::customContextMenuRequested, this, &main_window::show_spell_check_context_menu);
 
     transforms.push_back(std::make_unique<uppercase_transform>());
     transforms.push_back(std::make_unique<lowercase_transform>());
@@ -51,6 +57,8 @@ main_window::main_window()
     setup_search_menu();
     setup_tools_menu();
     setup_status_bar();
+
+    initialize_spell_checker();
 }
 
 main_window::~main_window() = default;
@@ -196,6 +204,13 @@ void main_window::setup_tools_menu()
     connect(action_word_freq, &QAction::triggered, this, [this] {
         show_word_frequency();
     });
+
+    tools_menu->addSeparator();
+
+    const auto* action_check_spelling = tools_menu->addAction("Check Spelling...");
+    connect(action_check_spelling, &QAction::triggered, this, [this] {
+        check_spelling();
+    });
 }
 
 void main_window::setup_status_bar()
@@ -206,8 +221,146 @@ void main_window::setup_status_bar()
     });
 }
 
-void main_window::update_status_bar()
+void main_window::initialize_spell_checker()
 {
+    spell_checker = std::make_shared<SpellChecker>();
+
+    QStringList possiblePaths = {
+        "data/words.txt",
+        "../data/words.txt",
+        "../../data/words.txt",
+        QCoreApplication::applicationDirPath() + "/data/words.txt"
+    };
+
+    bool loaded = false;
+    for (const QString& path : possiblePaths) {
+        if (QFile::exists(path)) {
+            if (spell_checker->loadDictionary(path)) {
+                qDebug() << "Dictionary loaded from:" << path
+                         << "(" << spell_checker->getDictionarySize() << "words)";
+                loaded = true;
+                break;
+            }
+        }
+    }
+
+    if (!loaded) {
+        QMessageBox::warning(this, "Spell Checker",
+                           "Could not load dictionary file.\n"
+                           "Please ensure 'data/words.txt' exists.");
+        return;
+    }
+
+    highlighter = new SpellCheckerHighlighter(editor->document(), spell_checker);
+}
+
+void main_window::show_spell_check_context_menu(const QPoint& pos)
+{
+    QMenu* menu = editor->createStandardContextMenu();
+
+    if (spell_checker && highlighter) {
+        QTextCursor cursor = editor->cursorForPosition(pos);
+        cursor.select(QTextCursor::WordUnderCursor);
+        QString word = cursor.selectedText().trimmed();
+
+        if (!word.isEmpty() && SpellChecker::isValidWord(word) &&
+            !spell_checker->isSpelledCorrectly(word)) {
+
+            menu->addSeparator();
+
+            QStringList suggestions = spell_checker->getSuggestions(word);
+
+            if (!suggestions.isEmpty()) {
+                QMenu* suggestionsMenu = menu->addMenu("Spelling Suggestions");
+
+                for (const QString& suggestion : suggestions) {
+                    QAction* action = suggestionsMenu->addAction(suggestion);
+
+                    connect(action, &QAction::triggered, [this, word, suggestion]() {
+                        QTextCursor cursor = editor->textCursor();
+                        cursor.select(QTextCursor::WordUnderCursor);
+
+                        if (cursor.selectedText().trimmed().compare(word, Qt::CaseInsensitive) == 0) {
+                            QString replacement = suggestion;
+
+                            if (word == word.toUpper()) {
+                                replacement = suggestion.toUpper();
+                            } else if (!word.isEmpty() && word[0].isUpper()) {
+                                replacement = suggestion;
+                                replacement[0] = replacement[0].toUpper();
+                            }
+
+                            cursor.insertText(replacement);
+                        }
+                    });
+                }
+            } else {
+                QAction* noSuggestions = menu->addAction("No suggestions available");
+                noSuggestions->setEnabled(false);
+            }
+
+            menu->addSeparator();
+        }
+    }
+
+    menu->exec(editor->viewport()->mapToGlobal(pos));
+    delete menu;
+}
+
+void main_window::check_spelling()
+{
+    if (!spell_checker || !highlighter) {
+        QMessageBox::warning(this, "Spell Checker", "Spell checker is not initialized.");
+        return;
+    }
+
+    highlighter->rehighlightAll();
+
+    int misspelledCount = 0;
+    QStringList misspelledWords;
+
+    QRegularExpression wordRegex("\\b[A-Za-z]+\\b");
+    QString text = editor->toPlainText();
+    QRegularExpressionMatchIterator it = wordRegex.globalMatch(text);
+
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        QString word = match.captured();
+
+        if (!spell_checker->isSpelledCorrectly(word)) {
+            misspelledCount++;
+            if (!misspelledWords.contains(word.toLower())) {
+                misspelledWords.append(word.toLower());
+            }
+        }
+    }
+
+    if (misspelledCount == 0) {
+        QMessageBox::information(this, "Spell Check Complete", "No misspelled words found.");
+    } else {
+        QString message = QString("Found %1 misspelled word(s).\n\n").arg(misspelledCount);
+
+        if (misspelledWords.size() <= 10) {
+            message += "Misspelled words:\n";
+            for (const QString& word : misspelledWords) {
+                message += "• " + word + "\n";
+            }
+        } else {
+            message += QString("Showing first 10 of %1 unique misspelled words:\n")
+                      .arg(misspelledWords.size());
+            for (int i = 0; i < 10; ++i) {
+                message += "• " + misspelledWords[i] + "\n";
+            }
+            message += "...and more.";
+        }
+
+        message += "\nRight-click on underlined words for suggestions.";
+
+        QMessageBox::information(this, "Spell Check Results", message);
+    }
+}
+
+void main_window::update_status_bar() const {
     const QString text = editor->toPlainText();
 
     int word_count = 0;

@@ -1,11 +1,13 @@
 //
-// Created by Shady  on 16/5/26.
+// Created by Shady  on 16/5/26.
 //
 
 #ifndef SIMPLE_NOTEPAD_PROJECT_MAIN_WINDOW_H
 #define SIMPLE_NOTEPAD_PROJECT_MAIN_WINDOW_H
 
 #include "text_transform.h"
+#include "spell_checker.h"
+#include "spell_checker_highlighter.h"
 
 #include <QDialog>
 #include <QMainWindow>
@@ -38,7 +40,7 @@ private:
     void save_file();
     void save_file_as();
     void update_title();
-    void update_status_bar();
+    void update_status_bar() const;
 
     void apply_transform(const text_transform& transform) const;
 
@@ -51,12 +53,19 @@ private:
 
     void show_word_frequency();
 
+    void initialize_spell_checker();
+    void check_spelling();
+    void show_spell_check_context_menu(const QPoint& pos);
+
     QTextEdit* editor { nullptr };
     QString current_file;
     std::vector<std::unique_ptr<text_transform>> transforms;
 
     QDialog* find_replace_dlg { nullptr };
     std::unique_ptr<Ui::find_replace_dialog> find_replace_ui;
+
+    std::shared_ptr<SpellChecker> spell_checker;
+    SpellCheckerHighlighter* highlighter { nullptr };
 };
 
 #endif //SIMPLE_NOTEPAD_PROJECT_MAIN_WINDOW_H

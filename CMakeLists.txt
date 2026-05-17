@@ -15,5 +15,9 @@ qt_add_executable(
         notepad_exception.h
         find_replace_dialog.ui
         word_frequency_dialog.ui
+        spell_checker.cpp
+        spell_checker.h
+        spell_checker_highlighter.cpp
+        spell_checker_highlighter.h
 )
 target_link_libraries(notepad PRIVATE Qt6::Widgets)
