@@ -1,37 +1,32 @@
 //
-// Created by Shady  on 17/5/26.
+// Created by Shady  on 16/5/26.
 //
 
 #include "spell_checker_highlighter.h"
 
 #include <utility>
 
-SpellCheckerHighlighter::SpellCheckerHighlighter(QTextDocument* parent, std::shared_ptr<SpellChecker> checker)
+SpellCheckerHighlighter::SpellCheckerHighlighter(QTextDocument *parent, std::shared_ptr<SpellChecker> checker)
     : QSyntaxHighlighter(parent)
-    , spellChecker(std::move(checker))
-{
+      , spellChecker(std::move(checker)) {
     setupFormats();
 }
 
-void SpellCheckerHighlighter::setupFormats()
-{
+void SpellCheckerHighlighter::setupFormats() {
     misspelledFormat.setUnderlineStyle(QTextCharFormat::SpellCheckUnderline);
     misspelledFormat.setUnderlineColor(Qt::red);
 }
 
-void SpellCheckerHighlighter::setSpellChecker(const std::shared_ptr<SpellChecker> &checker)
-{
+void SpellCheckerHighlighter::setSpellChecker(const std::shared_ptr<SpellChecker> &checker) {
     spellChecker = checker;
     rehighlight();
 }
 
-void SpellCheckerHighlighter::rehighlightAll()
-{
+void SpellCheckerHighlighter::rehighlightAll() {
     rehighlight();
 }
 
-void SpellCheckerHighlighter::highlightBlock(const QString& text)
-{
+void SpellCheckerHighlighter::highlightBlock(const QString &text) {
     if (!spellChecker) {
         return;
     }
